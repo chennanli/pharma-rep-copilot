@@ -1,0 +1,31 @@
+# ---- Secrets and local state ----
+.env
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# CMS CSVs, memory.db, chroma index
+data/
+logs/
+
+# Per-run benchmark output (the canonical questions.jsonl is kept; output is not)
+benchmarks/run-*.jsonl
+
+# Old default kept for back-compat
+chroma_data/
+
+# ---- macOS / editor noise ----
+.DS_Store
+**/.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# ---- Claude Code local agent config ----
+.claude/
+
+# NOTE: machine-local private material (drafts, prep notes, internal docs) is
+# ignored via .git/info/exclude on the author's machine, so this committed file
+# stays generic and reveals nothing project-specific.

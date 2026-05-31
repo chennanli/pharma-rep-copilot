@@ -1,0 +1,26 @@
+# Pinned for reproducibility. Update via `uv pip compile`.
+anthropic==0.40.0
+langgraph==0.2.50
+psycopg[binary]==3.2.3
+sqlglot==25.30.0
+python-dotenv==1.0.1
+pydantic==2.9.2
+pydantic-settings==2.6.1
+rapidfuzz==3.10.1
+
+# Memory (S1 enabled — was deferred in S0)
+chromadb==0.5.20
+
+# Web UI (S1 — FastAPI + HTMX)
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+jinja2==3.1.4
+sse-starlette==2.1.3
+python-multipart==0.0.17
+
+# Optional — local LLM backend. Only needed if LLM_PROVIDER=ollama.
+# (Raw HTTP fallback in llm_client.py works without this; the client just gives a nicer interface.)
+ollama==0.3.3
+
+# Deferred to later phases:
+# rank_bm25==0.2.2

@@ -1,0 +1,68 @@
+# Pharma Rep Copilot — full stack (Postgres + app).
+#
+# Usage:
+#   docker compose up -d                # start everything
+#   docker compose logs -f app          # follow app logs
+#   docker compose down                 # stop (keeps Postgres volume + memory data)
+#   docker compose down -v              # stop AND wipe everything
+#
+# The app container auto-bootstraps the DB + loads synthetic data on first run.
+# Set AUTO_SEED=none in .env to skip the seed (e.g. when planning to load real CMS data).
+services:
+  postgres:
+    image: postgres:16
+    container_name: hcp-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hcp_admin
+      POSTGRES_PASSWORD: admin-dev-only
+      POSTGRES_DB: hcp_insights
+    ports:
+      - "5432:5432"
+    volumes:
+      - hcp_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hcp_admin -d hcp_insights"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hcp-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Postgres connection (inside docker network → service name 'postgres')
+      PG_HOST: postgres
+      PG_PORT: "5432"
+      PG_DB: hcp_insights
+      PG_ADMIN_USER: hcp_admin
+      PG_ADMIN_PASSWORD: admin-dev-only
+      PG_USER: hcp_agent_ro
+      PG_PASSWORD: readonly-dev-only
+      PG_STATEMENT_TIMEOUT: "30"
+      # LLM
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5-coder:7b}
+      # Memory
+      MEMORY_DB_PATH: /app/data/memory.db
+      CHROMA_DIR: /app/data/chroma
+      # Web
+      DEMO_USER_DEFAULT: alice
+      AUTO_SEED: ${AUTO_SEED:-synth}
+    volumes:
+      # Persist memory.db + chroma across restarts so the demo's learning compounds
+      - ./data:/app/data
+    ports:
+      - "8080:8080"
+
+volumes:
+  hcp_pg_data:

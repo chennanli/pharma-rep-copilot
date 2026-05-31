@@ -1,0 +1,32 @@
+[project]
+name = "pharma-rep-copilot"
+version = "1.0.0"
+description = "Natural-language → SQL copilot for pharma reps, with two-layer team memory"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+addopts = "-v --tb=short"
+# Chroma's default ONNX embedding model downloads on first use; allow more time
+timeout = 120
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["data", ".venv", "docs"]
+
+[tool.ruff.lint]
+# E = pycodestyle errors, F = pyflakes, W = warnings, I = isort, B = flake8-bugbear, UP = pyupgrade
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+    "E501",   # line too long — handled by formatter
+    "B008",   # function call in default arg (FastAPI uses Depends() this way)
+    "B007",   # unused loop variable — fine in tight scripts
+    "UP006",  # use `list` instead of `List` — fine to mix
+    "UP007",  # use `X | Y` instead of `Optional[X]` — fine to mix
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]
+"scripts/*" = ["E501", "F841"]

@@ -1,0 +1,96 @@
+<div class="result-card">
+  <h3>{{ question }}</h3>
+
+  {% if examples_used %}
+    <div>
+      {% for ex in examples_used %}
+        <span class="provenance" title="similarity {{ '%.2f'|format(ex.score) }}">
+          ✓ used verified example from {{ ex.author or 'team' }}
+        </span>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div>
+      <span class="provenance cold">cold start — no verified examples retrieved</span>
+    </div>
+  {% endif %}
+
+  <div style="margin-top:10px;">
+    <strong>SQL:</strong>
+    <pre class="sql">{{ sql }}</pre>
+  </div>
+
+  {% if not safety_ok %}
+    <div style="color:#991b1b; margin-top:6px; font-size:0.85rem;">
+      <strong>Safety gate rejected:</strong> {{ safety_reason }}
+    </div>
+  {% endif %}
+
+  {% if warnings %}
+    <div style="color:#92400e; margin-top:6px; font-size:0.8rem;">
+      {% for w in warnings %}<div>⚠ {{ w }}</div>{% endfor %}
+    </div>
+  {% endif %}
+
+  {% if error %}
+    <div style="color:#991b1b; margin-top:6px; font-size:0.85rem;">
+      <strong>Execution error:</strong> {{ error }}
+    </div>
+  {% endif %}
+
+  {% if result_rows %}
+    <div class="meta">{{ rowcount }} rows in {{ elapsed_ms }} ms</div>
+    <table class="rows-table">
+      <thead>
+        <tr>{% for c in result_columns %}<th>{{ c }}</th>{% endfor %}</tr>
+      </thead>
+      <tbody>
+        {% for row in result_rows %}
+          {% set npi = row.get('npi') or row.get('provider_npi') or row.get('prescriber_npi') %}
+          <tr {% if npi %}class="clickable"
+                hx-get="/memory/hcp/{{ npi }}"
+                hx-target="#hcp-panel"
+                hx-swap="innerHTML"
+              {% endif %}>
+            {% for c in result_columns %}<td>{{ row[c] }}</td>{% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    {% if not error and safety_ok %}
+      <div style="margin-top:8px; color:#6c757d; font-style:italic; font-size:0.9rem;">
+        SQL executed successfully but returned 0 rows.
+        This is a common pharma data trap — e.g., Part D stores GENERIC names, not brand names.
+        Edit the SQL below to fix, then click <strong>Verify</strong> to teach the system for next time.
+      </div>
+    {% endif %}
+  {% endif %}
+
+  <div class="actions">
+    <form hx-post="/verify/{{ example_id }}" hx-swap="none" style="display:inline;">
+      <button type="submit" class="btn-verify">✓ Verify</button>
+    </form>
+    <form hx-post="/reject/{{ example_id }}" hx-swap="none" style="display:inline;">
+      <button type="submit" class="btn-reject">✗ Reject</button>
+    </form>
+    <button type="button" class="btn-edit"
+            onclick="document.getElementById('edit-form-{{ example_id }}').style.display='block'; this.style.display='none';">
+      ✏ Edit
+    </button>
+  </div>
+
+  <form id="edit-form-{{ example_id }}" style="display:none; margin-top:8px;"
+        hx-post="/verify/{{ example_id }}"
+        hx-swap="none">
+    <textarea class="edit-area" name="edited_sql">{{ sql }}</textarea>
+    <button type="submit" class="btn-verify">Save corrected SQL + Verify</button>
+  </form>
+
+  {% if sources %}
+    <div class="meta">
+      <strong>Sources:</strong>
+      {% for s in sources %}<a href="{{ s.url }}" target="_blank">{{ s.dataset }}</a>{% if not loop.last %} • {% endif %}{% endfor %}
+    </div>
+  {% endif %}
+</div>

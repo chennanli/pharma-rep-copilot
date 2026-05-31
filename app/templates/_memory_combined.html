@@ -1,0 +1,8 @@
+<!-- Both panels updated via HTMX out-of-band swap. The triggering form uses hx-swap="none"
+     so no targeted swap happens — only these OOB elements get applied. -->
+<div id="memory-counts" hx-swap-oob="innerHTML">
+  {% include "_counts.html" %}
+</div>
+<div id="examples-list" hx-swap-oob="innerHTML">
+  {% include "_examples_list.html" %}
+</div>

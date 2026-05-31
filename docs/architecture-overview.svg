@@ -1,0 +1,100 @@
+<svg viewBox="0 0 900 580" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-label="Pharma Rep Copilot system overview">
+<style>
+  .bg{ fill:#ffffff; }
+  .b{ stroke-width:1.5; rx:9; }
+  .src{ fill:#f4f6fa; stroke:#cdd3de; }
+  .gate{ fill:#fbeaea; stroke:#d98a8a; }
+  .mem{ fill:#fef7e6; stroke:#d9a441; }
+  .ui{ fill:#eef1f6; stroke:#cdd3de; }
+  .lbl{ fill:#1f2430; font-size:13.5px; font-weight:600; }
+  .sub{ fill:#6a7180; font-size:10.5px; }
+  .head{ fill:#6a7180; font-size:11px; font-weight:700; letter-spacing:.4px; }
+  .step{ fill:#5b5bd6; font-size:10px; font-weight:700; }
+  .gstep{ fill:#b14a4a; font-size:10px; font-weight:700; }
+  .gatelbl{ fill:#b14a4a; font-size:13.5px; font-weight:700; }
+  .memh{ font-size:14px; font-weight:700; }
+  .arr{ stroke:#9aa1b0; stroke-width:1.8; fill:none; }
+  .marr{ stroke:#d9a441; stroke-width:1.6; fill:none; stroke-dasharray:5 3; }
+  .ttl{ fill:#1f2430; font-size:16px; font-weight:700; }
+  .amber{ fill:#9a6b14; }
+</style>
+<defs>
+  <marker id="h" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#9aa1b0"/></marker>
+  <marker id="m" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#d9a441"/></marker>
+</defs>
+
+<rect class="bg" x="0" y="0" width="900" height="580" rx="12"/>
+<text x="28" y="32" class="ttl">System overview — one query, end to end</text>
+
+<!-- data sources -->
+<text x="28" y="60" class="head">PUBLIC CMS DATA  (loaded once at setup)</text>
+<rect x="28" y="68" width="210" height="42" class="b src"/>
+<text x="42" y="86" class="sub">Open Payments · Part D · NPI Registry</text>
+<text x="42" y="100" class="sub">(synthetic seed by default)</text>
+<path class="arr" d="M238,89 L306,89" marker-end="url(#h)"/>
+<text x="246" y="82" class="sub" font-size="9">seed</text>
+<rect x="312" y="66" width="180" height="46" class="b src"/>
+<text x="402" y="86" text-anchor="middle" class="lbl">Local Postgres 16</text>
+<text x="402" y="101" text-anchor="middle" class="sub">read-only role · in Docker</text>
+
+<!-- query pipeline -->
+<text x="28" y="150" class="head">AT QUERY TIME  (FastAPI + LangGraph agent)</text>
+<rect x="28" y="160" width="150" height="58" class="b src"/>
+<text x="40" y="178" class="step">ASK</text>
+<text x="103" y="194" text-anchor="middle" class="lbl">Rep's question</text>
+<text x="103" y="209" text-anchor="middle" class="sub">plain English</text>
+
+<rect x="206" y="160" width="172" height="58" class="b src"/>
+<text x="218" y="178" class="step">RETRIEVE</text>
+<text x="292" y="194" text-anchor="middle" class="lbl">Schema + 2 memories</text>
+<text x="292" y="209" text-anchor="middle" class="sub">build the prompt context</text>
+
+<rect x="406" y="160" width="140" height="58" class="b src"/>
+<text x="418" y="178" class="step">GEN_SQL</text>
+<text x="476" y="194" text-anchor="middle" class="lbl">LLM writes SQL</text>
+<text x="476" y="209" text-anchor="middle" class="sub">pluggable backend</text>
+
+<rect x="574" y="160" width="140" height="58" class="b gate"/>
+<text x="586" y="178" class="gstep">VALIDATE</text>
+<text x="644" y="194" text-anchor="middle" class="gatelbl">Safety gate</text>
+<text x="644" y="209" text-anchor="middle" class="sub">SELECT-only (AST)</text>
+
+<rect x="742" y="160" width="130" height="58" class="b src"/>
+<text x="754" y="178" class="step">EXEC → ANSWER</text>
+<text x="807" y="194" text-anchor="middle" class="lbl">Run + show</text>
+<text x="807" y="209" text-anchor="middle" class="sub">rows + sources</text>
+
+<path class="arr" d="M178,189 L204,189" marker-end="url(#h)"/>
+<path class="arr" d="M378,189 L404,189" marker-end="url(#h)"/>
+<path class="arr" d="M546,189 L572,189" marker-end="url(#h)"/>
+<path class="arr" d="M714,189 L740,189" marker-end="url(#h)"/>
+<path class="arr" d="M402,112 C402,135 807,128 807,158" marker-end="url(#h)"/>
+<text x="600" y="132" class="sub" font-size="9">SELECT (read-only)</text>
+
+<!-- memories -->
+<text x="28" y="262" class="head">TWO TEAM-SHARED MEMORIES   ·   SQLite source-of-truth + Chroma vector index</text>
+<rect x="28" y="296" width="410" height="120" class="b mem"/>
+<text x="46" y="322" class="memh amber">Question Memory</text>
+<text x="46" y="346" class="sub">Verified question → SQL pairs. Written when a user clicks ✓ Verify.</text>
+<text x="46" y="368" class="sub">READ on every new query: top-K similar past</text>
+<text x="46" y="385" class="sub">queries pasted in as few-shot examples.</text>
+
+<rect x="462" y="296" width="410" height="120" class="b mem"/>
+<text x="480" y="322" class="memh amber">Doctor Memory</text>
+<text x="480" y="346" class="sub">Short per-doctor facts (by NPI). Auto-extracted from results + rep notes.</text>
+<text x="480" y="368" class="sub">READ on every query: facts about doctors in</text>
+<text x="480" y="385" class="sub">the rows show in the side panel.</text>
+
+<path class="marr" d="M292,218 L240,292" marker-end="url(#m)"/>
+<text x="150" y="250" class="amber" font-size="9">read at retrieve</text>
+<path class="marr" d="M807,218 C807,255 700,258 668,292" marker-end="url(#m)"/>
+<text x="700" y="250" class="amber" font-size="9">write after exec</text>
+
+<!-- UI -->
+<rect x="28" y="446" width="844" height="56" class="b ui"/>
+<text x="46" y="471" class="lbl">Browser UI (HTMX, two panes)</text>
+<text x="46" y="489" class="sub">LEFT: chat — ask, edit, verify     ·     RIGHT: memory — Question Memory counter + Doctor side panel</text>
+<path class="arr" d="M450,416 L450,444" marker-end="url(#h)"/>
+
+<text x="28" y="540" class="sub" font-size="10.5">The model never changes — "getting smarter" = a growing, source-attributed library that gets retrieved into the prompt (RAG + few-shot).</text>
+</svg>

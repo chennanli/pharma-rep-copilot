@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Pharma Rep Copilot — text-to-SQL with team memory</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <h1>Pharma Rep Copilot — ask data questions in plain English. The team teaches it as they go.</h1>
+  <span class="who">signed in as <strong>{{ demo_user }}</strong></span>
+</header>
+
+<main class="layout">
+
+  <!-- LEFT: chat / query -->
+  <section class="pane">
+    <form class="chat-form"
+          hx-post="/ask"
+          hx-target="#result-area"
+          hx-swap="innerHTML"
+          hx-indicator="#thinking">
+      <input type="text" name="question" placeholder="Ask a pharma data question — e.g., Top 10 oncologists in California prescribing Herceptin in 2023"
+             autocomplete="off" required>
+      <button type="submit">Ask</button>
+    </form>
+
+    <div id="thinking" class="htmx-indicator" style="color:#6c757d; font-size:0.9rem;">
+      ⏳ thinking… (running 8 nodes — rewrite, retrieve_schema, retrieve_examples, retrieve_hcp_context, gen_sql, validate, exec, extract_hcp_facts)
+    </div>
+
+    <div id="result-area">
+      {% include "_intro.html" %}
+    </div>
+  </section>
+
+  <!-- RIGHT: memory -->
+  <aside class="pane memory-pane">
+    <div id="memory-counts">
+      {% include "_counts.html" %}
+    </div>
+
+    <div>
+      <div class="section-title">Recent verified examples (corpus flywheel)</div>
+      <div id="examples-list">
+        {% include "_examples_list.html" %}
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">HCP entity memory</div>
+      <div id="hcp-panel">
+        <div class="empty-state">Click an HCP row in a result table to see their facts.</div>
+      </div>
+    </div>
+  </aside>
+
+</main>
+
+</body>
+</html>

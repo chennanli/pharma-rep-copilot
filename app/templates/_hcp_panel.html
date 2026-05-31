@@ -1,0 +1,30 @@
+<div class="hcp-card">
+  <h4>NPI {{ npi }}</h4>
+  {% if facts %}
+    {% for f in facts %}
+      <div class="hcp-fact">
+        <span class="cat {{ f.category }}">{{ f.category }}</span>
+        {{ f.fact_text }}
+        {% if f.fact_type == "NOTE" and f.author %}
+          <span style="font-size:0.7rem; color:#6c757d;">— {{ f.author }}</span>
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-state">No facts recorded for this HCP yet.</div>
+  {% endif %}
+
+  <form class="note-form"
+        hx-post="/note"
+        hx-target="#hcp-panel"
+        hx-swap="innerHTML">
+    <input type="hidden" name="npi" value="{{ npi }}">
+    <select name="category" required>
+      <option value="rep_note" selected>rep_note</option>
+      <option value="clinical_focus">clinical_focus</option>
+      <option value="affiliation">affiliation</option>
+    </select>
+    <textarea name="fact_text" placeholder="Add a note about this HCP — e.g., 'Mentioned interest in subQ formulation at ASCO 2024'" required></textarea>
+    <button type="submit" style="font-size:0.8rem; padding:4px 10px;">Add note</button>
+  </form>
+</div>

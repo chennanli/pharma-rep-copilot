@@ -1,0 +1,10 @@
+{% if recent_examples %}
+  {% for ex in recent_examples %}
+    <div class="example-card">
+      <div class="q">{{ ex.question }}</div>
+      <div class="author">verified by {{ ex.author or 'team' }}</div>
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="empty-state">No verified examples yet. Verify one to start the flywheel.</div>
+{% endif %}

@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    name: lint + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: latest
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Create venv + install deps
+        run: |
+          uv venv --python 3.12
+          uv pip install -r requirements-dev.txt
+
+      - name: Cache Chroma's default embedding model
+        # First run downloads the ~80MB ONNX model; cache it so subsequent
+        # runs don't re-download.
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/chroma
+          key: chroma-onnx-${{ runner.os }}
+
+      - name: Lint with ruff
+        run: |
+          source .venv/bin/activate
+          ruff check .
+
+      - name: Run pytest
+        run: |
+          source .venv/bin/activate
+          pytest

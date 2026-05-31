@@ -1,0 +1,93 @@
+/* Pharma Rep Copilot — minimal product-y styling layered over pico.css */
+
+:root {
+  --side-w: 380px;
+  --gap: 18px;
+  --panel-bg: var(--card-background-color, #fff);
+  --muted: var(--muted-color, #6c757d);
+}
+
+body { padding: 0; margin: 0; }
+
+header.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 24px; border-bottom: 1px solid var(--card-border-color, #e6e6e6);
+  background: var(--panel-bg);
+}
+header.topbar h1 { font-size: 1.1rem; margin: 0; }
+header.topbar .who { color: var(--muted); font-size: 0.9rem; }
+
+main.layout {
+  display: grid;
+  grid-template-columns: 1fr var(--side-w);
+  gap: var(--gap);
+  padding: var(--gap);
+  height: calc(100vh - 56px);
+  box-sizing: border-box;
+}
+
+.pane { background: var(--panel-bg); border: 1px solid var(--card-border-color, #e6e6e6);
+        border-radius: 10px; padding: 16px; overflow-y: auto; }
+
+/* Chat pane */
+.chat-form { display: flex; gap: 8px; margin-bottom: 16px; }
+.chat-form input[type=text] { flex: 1; }
+
+.result-card { border: 1px solid var(--card-border-color, #e6e6e6); border-radius: 8px;
+               padding: 12px; margin-top: 12px; }
+.result-card h3 { margin-top: 0; font-size: 0.95rem; }
+.result-card .sql { background: #0e1116; color: #c9d1d9; padding: 10px;
+                    border-radius: 6px; overflow-x: auto; font-size: 0.85rem;
+                    font-family: ui-monospace, Menlo, monospace; white-space: pre-wrap; }
+.result-card .meta { font-size: 0.8rem; color: var(--muted); margin-top: 8px; }
+
+.rows-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 10px; }
+.rows-table th, .rows-table td { border-bottom: 1px solid #eee; padding: 4px 8px; text-align: left; }
+.rows-table tr.clickable:hover { background: #f7faff; cursor: pointer; }
+
+.actions { margin-top: 10px; display: flex; gap: 8px; }
+.actions button { padding: 4px 10px; font-size: 0.85rem; }
+.btn-verify { background: #16a34a; color: white; border: none; border-radius: 6px; }
+.btn-reject { background: #dc2626; color: white; border: none; border-radius: 6px; }
+.btn-edit   { background: #3b82f6; color: white; border: none; border-radius: 6px; }
+
+.edit-area { width: 100%; min-height: 100px; font-family: ui-monospace, Menlo, monospace;
+             font-size: 0.85rem; padding: 6px; margin-top: 8px; }
+
+.provenance { display: inline-block; padding: 2px 8px; border-radius: 12px;
+              font-size: 0.75rem; background: #ecfdf5; color: #065f46; margin-right: 6px; }
+.provenance.cold { background: #f3f4f6; color: #374151; }
+
+/* Memory side pane */
+.memory-pane { display: flex; flex-direction: column; gap: 14px; }
+.counts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.count-box { padding: 12px; background: #f9fafb; border-radius: 8px; text-align: center; }
+.count-box .n { font-size: 1.4rem; font-weight: 600; display: block; }
+.count-box .lbl { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+.section-title { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;
+                 color: var(--muted); margin: 6px 0; }
+
+.example-card { font-size: 0.8rem; padding: 8px; border: 1px solid #e6e6e6;
+                border-radius: 6px; margin-bottom: 6px; }
+.example-card .q { font-weight: 500; }
+.example-card .author { font-size: 0.7rem; color: var(--muted); }
+
+.hcp-card { font-size: 0.85rem; padding: 10px; border: 1px solid #e6e6e6;
+            border-radius: 6px; margin-bottom: 8px; background: #fff; }
+.hcp-card h4 { margin: 0 0 6px 0; font-size: 0.9rem; }
+.hcp-fact { font-size: 0.8rem; padding: 4px 0; border-top: 1px dashed #eee; }
+.hcp-fact .cat { display: inline-block; font-size: 0.65rem; padding: 1px 6px;
+                 border-radius: 8px; margin-right: 6px; vertical-align: middle;
+                 background: #e0e7ff; color: #3730a3; text-transform: uppercase; }
+.hcp-fact .cat.rep_note { background: #fef3c7; color: #92400e; }
+.hcp-fact .cat.payment_history { background: #fce7f3; color: #9d174d; }
+.hcp-fact .cat.prescribing_pattern { background: #d1fae5; color: #065f46; }
+.hcp-fact .cat.clinical_focus { background: #dbeafe; color: #1e40af; }
+.hcp-fact .cat.affiliation { background: #e0e7ff; color: #3730a3; }
+
+.note-form { margin-top: 8px; }
+.note-form textarea { width: 100%; min-height: 50px; font-size: 0.8rem; padding: 4px; }
+.note-form select { font-size: 0.8rem; }
+
+.empty-state { color: var(--muted); font-size: 0.85rem; font-style: italic; padding: 12px 0; }
