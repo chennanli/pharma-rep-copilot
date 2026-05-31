@@ -45,22 +45,42 @@ load_dotenv(ROOT / ".env")
 # Discovery page (paste into browser if 404):
 #   https://data.cms.gov/provider-summary-by-type-of-service
 PART_D_DATASETS = [
-    # Try in order — newest first.
-    ("Medicare Part D Prescribers by Provider and Drug — RY24 (2022)",
+    # Try in order — newest first. UUIDs rotate ~yearly; verified current 2026-05.
+    ("Medicare Part D Prescribers - by Provider and Drug (latest, data year 2024)",
+     "9552739e-3d05-4c1b-8eff-ecabf391e2e5"),
+    # Older (now-dead) UUIDs kept as a breadcrumb of where to look if this rotates:
+    ("Medicare Part D Prescribers by Provider and Drug — RY24 (2022) [stale]",
      "9512c660-08b7-49a2-b5b9-3e2b41d6b35e"),
-    ("Medicare Part D Prescribers by Provider and Drug — RY23 (2021)",
-     "00c84e8e-9bb8-44e3-a8a7-bf80a3a6abd3"),
 ]
+# IMPORTANT: Open Payments is NOT on data.cms.gov — it lives on its own portal
+# (openpaymentsdata.cms.gov) with a different (DKAN datastore) query API.
+# Discovery: https://openpaymentsdata.cms.gov/data.json
 OPEN_PAYMENTS_DATASETS = [
-    # General Payments dataset
-    ("Open Payments General Payments — PGYR23 (2023)",
-     "ee5d0586-f3cc-4f76-bfc3-d70b29b3d4f8"),
-    ("Open Payments General Payments — PGYR22 (2022)",
-     "d11a3a4f-3b1f-43f9-bbe2-a3e0e6fe1d39"),
+    # (label, dataset_id) — verified current 2026-05. General Payment Data.
+    ("Open Payments — 2023 General Payment Data",
+     "fb3a65aa-c901-4a38-a813-b04b00dfa2a9"),
+    ("Open Payments — 2022 General Payment Data",
+     "df01c2f8-dc1f-4e79-96cb-8208beaf143c"),
 ]
-
+# Open Payments program year that the dataset above corresponds to.
+OPEN_PAYMENTS_YEAR = 2023
 
 API_BASE = "https://data.cms.gov/data-api/v1/dataset"
+# Open Payments DKAN datastore query endpoint (separate host, separate API shape).
+OP_API_BASE = "https://openpaymentsdata.cms.gov/api/1/datastore/query"
+OP_PAGE_SIZE = 500  # this API caps page size at 500
+
+# The Open Payments columns we keep (machine/lowercase names from the datastore;
+# ingest_open_payments.py resolves headers case-insensitively).
+OP_WANTED_COLUMNS = [
+    "record_id", "program_year", "payment_publication_date", "covered_recipient_npi",
+    "covered_recipient_first_name", "covered_recipient_last_name", "recipient_city",
+    "recipient_state", "covered_recipient_specialty_1",
+    "applicable_manufacturer_or_applicable_gpo_making_payment_name",
+    "total_amount_of_payment_usdollars", "nature_of_payment_or_transfer_of_value",
+    "name_of_drug_or_biological_or_device_or_medical_supply_1",
+    "product_category_or_therapeutic_area_1",
+]
 PAGE_SIZE = 5000
 
 
@@ -149,28 +169,49 @@ def download_part_d(state: str, max_rows: int, out_csv: Path):
 
 
 def download_open_payments(state: str, max_rows: int, out_csv: Path):
-    print("\n▶ Open Payments: probing datasets ...")
-    filters = {"Recipient_State": state.upper()}
-    chosen = pick_dataset(OPEN_PAYMENTS_DATASETS, filters)
-    if not chosen:
-        print("✗ All Open Payments dataset UUIDs failed.")
-        print("  Grab the current UUID from:")
-        print("  https://www.cms.gov/openpayments/data/datasetdownloads")
-        return 0
-
-    label, uuid = chosen
+    """Open Payments lives on its OWN portal (openpaymentsdata.cms.gov) with a
+    DKAN datastore query API — different host and query shape from Part D.
+    We page through CA General Payments and write the columns ingest expects.
+    """
+    print("\n▶ Open Payments (openpaymentsdata.cms.gov datastore) ...")
+    label, ds_id = OPEN_PAYMENTS_DATASETS[0]
     print(f"  Using: {label}")
     print(f"  Streaming up to {max_rows:,} rows to {out_csv} ...")
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     n = 0
+    offset = 0
     with out_csv.open("w", newline="", encoding="utf-8") as fh:
-        writer = None
-        for row in fetch_paginated(uuid, filters, max_rows):
-            if writer is None:
-                writer = csv.DictWriter(fh, fieldnames=list(row.keys()))
-                writer.writeheader()
-            writer.writerow(row)
-            n += 1
+        writer = csv.DictWriter(fh, fieldnames=OP_WANTED_COLUMNS)
+        writer.writeheader()
+        while n < max_rows:
+            params = {
+                "conditions[0][property]": "recipient_state",
+                "conditions[0][value]": state.upper(),
+                "conditions[0][operator]": "=",
+                "limit": min(OP_PAGE_SIZE, max_rows - n),
+                "offset": offset,
+            }
+            url = f"{OP_API_BASE}/{ds_id}/0?{urlencode(params)}"
+            req = Request(url, headers={"Accept": "application/json",
+                                        "User-Agent": "pharma-rep-copilot/1.0"})
+            try:
+                with urlopen(req, timeout=60) as r:
+                    body = json.loads(r.read().decode("utf-8"))
+            except Exception as e:
+                print(f"  ! request failed at offset {offset}: {e}; stopping early")
+                break
+            results = body.get("results") or []
+            if not results:
+                break
+            for row in results:
+                writer.writerow({k: row.get(k, "") for k in OP_WANTED_COLUMNS})
+                n += 1
+                if n >= max_rows:
+                    break
+            print(f"    ... {n:,} rows fetched")
+            if len(results) < params["limit"]:
+                break
+            offset += len(results)
     print(f"  ✓ wrote {n:,} rows")
     return n
 
@@ -180,6 +221,9 @@ def main():
     p.add_argument("--state", default="CA")
     p.add_argument("--max-rows", type=int, default=200000,
                    help="Per-dataset cap. Default 200K keeps each download under ~5 minutes.")
+    p.add_argument("--part-d-year", type=int, default=2024,
+                   help="Program year to STAMP on the Part D rows (the by-provider-and-drug "
+                        "data-api serves the latest year; verified 2024 as of 2026-05).")
     p.add_argument("--skip-ingest", action="store_true",
                    help="Just download CSVs to data/raw/; don't COPY into Postgres.")
     args = p.parse_args()
@@ -191,24 +235,38 @@ def main():
     n_pd = download_part_d(args.state, args.max_rows, pd_csv)
     n_op = download_open_payments(args.state, args.max_rows, op_csv)
 
+    # Fail loudly instead of silently importing stale CSVs (a download that returns
+    # zero rows means the API rotated/changed — do NOT pretend success).
+    if n_pd == 0:
+        print("\n✗ Part D download returned 0 rows. Aborting — not ingesting stale data.")
+        print("  Check the dataset UUID at https://data.cms.gov/provider-summary-by-type-of-service"
+              "/medicare-part-d-prescribers and update PART_D_DATASETS.")
+        sys.exit(2)
+    if n_op == 0:
+        print("\n⚠ Open Payments returned 0 rows — continuing with Part D only.")
+        print("  Check the dataset id at https://openpaymentsdata.cms.gov/data.json"
+              " and update OPEN_PAYMENTS_DATASETS.")
+
     if args.skip_ingest:
         print(f"\n✓ Downloads complete. {n_pd:,} Part D rows + {n_op:,} Open Payments rows in data/raw/")
         return
 
-    # Re-use the existing ingestion scripts pointing them at the downloaded files
+    # Re-use the existing ingestion scripts pointing them at the downloaded files.
+    # check=True so an ingest failure aborts loudly instead of printing a fake "Done".
     import subprocess
-    print("\n▶ Ingesting Part D ...")
+    print(f"\n▶ Ingesting Part D (program year {args.part_d_year}) ...")
     subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "ingest_part_d.py"),
-         "--input", str(pd_csv), "--state", args.state],
-        check=False,
+         "--input", str(pd_csv), "--state", args.state, "--year", str(args.part_d_year)],
+        check=True,
     )
-    print("\n▶ Ingesting Open Payments ...")
-    subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "ingest_open_payments.py"),
-         "--input", str(op_csv), "--state", args.state],
-        check=False,
-    )
+    if n_op > 0:
+        print("\n▶ Ingesting Open Payments ...")
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "ingest_open_payments.py"),
+             "--input", str(op_csv), "--state", args.state],
+            check=True,
+        )
     print("\n✓ Done.")
 
 

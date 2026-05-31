@@ -136,10 +136,35 @@ def test_recall_hcp_facts_filters_by_npi(tmp_memory_paths):
     store.add_hcp_fact("2222222222", "clinical_focus",
                        "Cardiologist in LA", fact_type="AUTO")
 
-    # Filter to first NPI only
-    hits = store.recall_hcp_facts("oncology", npis=["1111111111"])
+    # Filter to first NPI only. include_unverified=True because these are AUTO
+    # facts and the default prompt-path recall now excludes unverified drafts.
+    hits = store.recall_hcp_facts("oncology", npis=["1111111111"], include_unverified=True)
     assert all(h["npi"] == "1111111111" for h in hits)
     assert len(hits) >= 1
+
+
+def test_recall_excludes_unverified_auto_facts_by_default(tmp_memory_paths):
+    """Auto-extracted (AUTO) facts are drafts: the default recall (the prompt path)
+    must exclude them; only human NOTE facts feed the prompt. include_unverified=True
+    (the display path) returns everything."""
+    store = MemoryStore(
+        db_path=tmp_memory_paths["db_path"],
+        chroma_dir=tmp_memory_paths["chroma_dir"],
+    )
+    npi = "1234567890"
+    store.add_hcp_fact(npi, "prescribing_pattern",
+                       "Prescribed trastuzumab 47 times in 2024", fact_type="AUTO")
+    store.add_hcp_fact(npi, "rep_note",
+                       "Asked about subQ formulation at ASCO", fact_type="NOTE", author="alice")
+
+    # Default (prompt path): only the human NOTE comes back, not the AUTO draft.
+    prompt_hits = store.recall_hcp_facts("trastuzumab oncology", npis=[npi])
+    assert len(prompt_hits) == 1
+    assert "subQ" in prompt_hits[0]["fact_text"]
+
+    # Display path: both come back.
+    all_hits = store.recall_hcp_facts("trastuzumab oncology", npis=[npi], include_unverified=True)
+    assert len(all_hits) == 2
 
 
 def test_count_facts_and_distinct_hcps(tmp_memory_paths):

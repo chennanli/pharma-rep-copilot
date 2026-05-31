@@ -27,6 +27,28 @@ FORBIDDEN_ROOT_KINDS = (
     exp.Grant,
 )
 
+# Data-modifying / DDL node types that must NOT appear ANYWHERE in the tree —
+# including nested inside a CTE (e.g. `WITH x AS (DELETE ... RETURNING *) SELECT ...`,
+# which Postgres supports). Checked tree-wide, not just at the root.
+FORBIDDEN_ANYWHERE_KINDS = (
+    exp.Insert, exp.Update, exp.Delete, exp.Merge,
+    exp.Create, exp.Drop, exp.Alter, exp.TruncateTable,
+    exp.Grant, exp.Command,  # exp.Command catches CALL/VACUUM/etc. sqlglot can't fully model
+)
+
+# Schemas the agent is allowed to read. Anything else (information_schema, pg_catalog,
+# pg_temp, a stray public.*) is rejected so the agent can't probe DB metadata.
+ALLOWED_SCHEMAS = {"payments", "partd", "npi", "reference"}
+
+# Functions that have nothing to do with analytics and are classic abuse vectors
+# (time-based DoS, file/network access). Rejected by name, case-insensitive.
+DENIED_FUNCTIONS = {
+    "pg_sleep", "pg_sleep_for", "pg_sleep_until",
+    "pg_read_file", "pg_read_binary_file", "pg_ls_dir", "pg_stat_file",
+    "lo_import", "lo_export", "dblink", "dblink_exec",
+    "query_to_xml", "copy", "pg_terminate_backend", "pg_cancel_backend",
+}
+
 # Columns whose appearance in the SELECT list (without GROUP BY) suggests single-HCP exposure.
 HCP_IDENTIFYING_COLUMNS = {
     "provider_first_name",
@@ -59,20 +81,20 @@ def validate(sql: str, *, dialect: str = "postgres", row_limit: int = 200,
     if ";" in stripped:
         return SafetyResult(False, sql, "Multiple statements not allowed.")
 
-    # Reject bind placeholders before parsing — sqlglot would accept them
-    for marker in (":", "?", "%s"):
-        if marker in stripped:
-            # `:` is also legal in some casts like `::int`, so be precise
-            if marker == ":" and "::" in stripped:
-                # allow Postgres casts; check for bare colon-name pattern via simple heuristic
-                import re
-                if not re.search(r":[a-zA-Z_]", stripped):
-                    continue
-            if marker == ":":
-                import re
-                if not re.search(r":[a-zA-Z_]", stripped):
-                    continue
-            return SafetyResult(False, sql, f"Bind variable placeholder '{marker}' not allowed.")
+    # Reject genuine bind-variable placeholders, but do NOT false-reject:
+    #   - Postgres `::` casts (e.g. total::numeric)
+    #   - `%` or `?` that appear inside string literals (e.g. LIKE '%semaglutide%')
+    import re as _re
+    # 1) blank out single-quoted string literals so their contents can't trip us
+    _scrubbed = _re.sub(r"'(?:[^']|'')*'", "''", stripped)
+    # 2) drop Postgres :: cast operators
+    _scrubbed = _scrubbed.replace("::", " ")
+    if (
+        _re.search(r"(?<![:\w]):[a-zA-Z_]\w*", _scrubbed)   # :name  (named bind var)
+        or _re.search(r"%\(?\w*\)?s", _scrubbed)            # %s / %(name)s  (psycopg)
+        or _re.search(r"(?<!\w)\?(?!\w)", _scrubbed)        # bare ?  (qmark bind var)
+    ):
+        return SafetyResult(False, sql, "Bind variable placeholder not allowed.")
 
     try:
         parsed = sqlglot.parse_one(stripped, dialect=dialect)
@@ -93,6 +115,33 @@ def validate(sql: str, *, dialect: str = "postgres", row_limit: int = 200,
             return SafetyResult(False, sql, "Only SELECT (and WITH ... SELECT) is allowed.")
     elif not isinstance(parsed, exp.Select):
         return SafetyResult(False, sql, f"Top-level statement is not SELECT (got {type(parsed).__name__}).")
+
+    # Reject data-modifying / DDL nodes ANYWHERE in the tree (e.g. hidden inside a CTE).
+    for kind in FORBIDDEN_ANYWHERE_KINDS:
+        node = parsed.find(kind)
+        if node is not None:
+            return SafetyResult(False, sql,
+                                f"Disallowed statement type {type(node).__name__} found in the query "
+                                f"(data-modifying/DDL is never allowed, even inside a CTE).")
+
+    # Function denylist (time-based DoS, file/network access, etc.)
+    for fn in parsed.find_all(exp.Anonymous):
+        fname = (fn.name or "").lower()
+        if fname in DENIED_FUNCTIONS:
+            return SafetyResult(False, sql, f"Function '{fname}()' is not allowed.")
+    for fn in parsed.find_all(exp.Func):
+        fname = (fn.sql_name() or "").lower()
+        if fname in DENIED_FUNCTIONS:
+            return SafetyResult(False, sql, f"Function '{fname}()' is not allowed.")
+
+    # Schema allowlist: any schema-qualified table must be in an allowed schema.
+    # (Unqualified names are CTE aliases / subquery refs and are fine.)
+    for tbl in parsed.find_all(exp.Table):
+        schema = (tbl.db or "").lower()
+        if schema and schema not in ALLOWED_SCHEMAS:
+            return SafetyResult(False, sql,
+                                f"Table references schema '{schema}', which is not allowed. "
+                                f"Allowed schemas: {', '.join(sorted(ALLOWED_SCHEMAS))}.")
 
     warnings = []
 

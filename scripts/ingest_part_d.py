@@ -73,8 +73,9 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--input", default=str(DEFAULT_INPUT))
     p.add_argument("--state", default="CA")
-    p.add_argument("--year", type=int, default=2022,
-                   help="Data year — stored in the row, not used for filtering (CMS file is single-year).")
+    p.add_argument("--year", type=int, default=2024,
+                   help="Program year stamped on each row (the by-provider-and-drug data-api "
+                        "serves the latest year; verified 2024 as of 2026-05). Not used for filtering.")
     p.add_argument("--batch", type=int, default=2000)
     args = p.parse_args()
 

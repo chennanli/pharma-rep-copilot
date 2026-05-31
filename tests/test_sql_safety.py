@@ -120,3 +120,30 @@ def test_unparseable_sql_rejected_gracefully():
     assert r.ok is False
     # Either fails to parse OR fails type check; both are acceptable
     assert r.reason is not None
+
+
+# ---------- hardening: nested DML, dangerous functions, schema allowlist ----------
+
+@pytest.mark.parametrize("sql", [
+    # data-modifying statement hidden inside a CTE (Postgres allows this) must be rejected
+    "WITH t AS (DELETE FROM partd.prescriber_drug_yearly RETURNING *) SELECT * FROM t",
+    "WITH t AS (UPDATE npi.npi_registry SET npi='x' RETURNING *) SELECT * FROM t",
+    # time-based DoS / file-access functions
+    "SELECT pg_sleep(10)",
+    "SELECT pg_read_file('/etc/passwd')",
+    # metadata probing via non-allowed schemas
+    "SELECT * FROM information_schema.tables",
+    "SELECT * FROM pg_catalog.pg_tables",
+])
+def test_rejects_hardened_cases(sql):
+    assert validate(sql).ok is False
+
+
+@pytest.mark.parametrize("sql", [
+    "SELECT prscrbr_npi, SUM(tot_clms) FROM partd.prescriber_drug_yearly "
+    "WHERE prscrbr_state = 'CA' GROUP BY prscrbr_npi",
+    "WITH d AS (SELECT generic FROM reference.drug_alias WHERE brand ILIKE 'herceptin') "
+    "SELECT COUNT(*) FROM payments.general_payments",
+])
+def test_allows_legit_allowed_schema_queries(sql):
+    assert validate(sql).ok is True

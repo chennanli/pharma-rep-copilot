@@ -300,14 +300,31 @@ class MemoryStore:
         return [self._row_to_fact(r) for r in rows]
 
     def recall_hcp_facts(self, query_text: str, npis: Optional[list[str]] = None,
-                         k: int = 8) -> list[dict]:
+                         k: int = 8, include_unverified: bool = False) -> list[dict]:
         """Vector-retrieve HCP facts relevant to a query. If `npis` is given, filter to those.
+
+        By default this returns ONLY human-entered NOTE facts. Auto-extracted facts
+        (fact_type='AUTO') are unverified drafts: they are shown in the side panel for
+        a human to read, but they are NOT fed back into the SQL-generation prompt
+        (avoids a model's own hallucinated facts silently steering later queries —
+        a context-poisoning risk that matters in a regulated setting). Pass
+        include_unverified=True only for display/debug paths.
 
         Returns list of {id, npi, category, fact_text, author, ts, score}.
         """
         if self._coll_hcp.count() == 0:
             return []
-        where = {"npi": {"$in": [str(n) for n in npis]}} if npis else None
+        conds: list[dict] = []
+        if not include_unverified:
+            conds.append({"fact_type": "NOTE"})  # only human-verified notes feed the prompt
+        if npis:
+            conds.append({"npi": {"$in": [str(n) for n in npis]}})
+        if not conds:
+            where = None
+        elif len(conds) == 1:
+            where = conds[0]
+        else:
+            where = {"$and": conds}
         res = self._coll_hcp.query(
             query_texts=[query_text],
             n_results=min(k, self._coll_hcp.count()),

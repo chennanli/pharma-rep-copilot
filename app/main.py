@@ -29,6 +29,7 @@ from fastapi.templating import Jinja2Templates
 from .agent_graph import ask, step_names
 from .hcp_extractor import extract_and_store
 from .memory_store import get_store
+from .sql_safety import validate as _validate_sql
 
 load_dotenv()
 
@@ -139,9 +140,20 @@ async def post_verify(request: Request, example_id: int,
                       edited_sql: Optional[str] = Form(None)):
     user = _user_from(request)
     store = get_store()
+    clean_edit = edited_sql.strip() if edited_sql and edited_sql.strip() else None
+
+    # A human-edited SQL becomes a VERIFIED few-shot example that steers future
+    # generations — so it must clear the SAME safety gate as machine-generated SQL.
+    # Never let an unsafe hand-edit into the corpus.
+    if clean_edit is not None:
+        sr = _validate_sql(clean_edit)
+        if not sr.ok:
+            raise HTTPException(
+                400, f"Edited SQL rejected by the safety gate: {sr.reason}. Not verified.")
+        clean_edit = sr.sql  # store the validated/normalized form
+
     try:
-        store.mark_verified(example_id, author=user,
-                            edited_sql=(edited_sql.strip() if edited_sql and edited_sql.strip() else None))
+        store.mark_verified(example_id, author=user, edited_sql=clean_edit)
     except KeyError as e:
         raise HTTPException(404, f"example {example_id} not found") from e
     return await _memory_panel(request)

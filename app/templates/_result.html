@@ -46,7 +46,7 @@
       </thead>
       <tbody>
         {% for row in result_rows %}
-          {% set npi = row.get('npi') or row.get('provider_npi') or row.get('prescriber_npi') %}
+          {% set npi = row.get('npi') or row.get('provider_npi') or row.get('prescriber_npi') or row.get('prscrbr_npi') or row.get('covered_recipient_npi') %}
           <tr {% if npi %}class="clickable"
                 hx-get="/memory/hcp/{{ npi }}"
                 hx-target="#hcp-panel"
