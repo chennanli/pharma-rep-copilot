@@ -42,7 +42,7 @@
 
 The NL→SQL part is well-trodden ground. The reason this repo exists is to show that **the memory layer actually compounds visibly** when the team is small (10–20 users) and the value per interaction is high.
 
-Both memories are persistent, team-shared, and source-attributed (every fact links back to a verified query ID or a named author). Question Memory entries can be rejected (removed from retrieval); per-fact deletion and a verification lifecycle for Doctor Memory are on the roadmap.
+Both memories are persistent, team-shared, and source-attributed (every fact links back to its **originating query ID** — verified or pending — or a named author). Question Memory entries can be rejected (removed from retrieval); per-fact human verification and deletion for Doctor Memory are on the roadmap.
 
 | Dimension | Value |
 |---|---|
@@ -134,7 +134,7 @@ This is the team-memory effect at the entity level: every query any rep runs qui
 | **Verified queries help DIFFERENT users (Question Memory crosses user boundaries)** | Screenshot 3: top right shows "signed in as **bob**"; the badge shows `✓ used verified example from alice`. Two different users; cross-user transfer is automatic. |
 | Team memory lowers cold-start cost for the next user | Bob's Kadcyla SQL reused Alice's verified Herceptin pattern on the first try instead of cold-starting. (Latency varies run to run; the claim is the mechanism, not a stopwatch number.) |
 | Doctor Memory auto-builds real physician profiles | Screenshot 4: Bob clicks Dr. Michael Chung; sees auto-extracted specialty + Kadcyla prescribing — no rep typed them. Across both queries: 16 facts / 8 doctors. |
-| Measured on real data (current scope) | 7 California-scoped questions matching the loaded slice. A representative run: **exec 6–7 / 7, recall ≈ 50%** (strict "referenced every expected table" — the agent often answers via Part D's own specialty column instead of joining `npi`), **kw 100%** of the questions that return rows. Numbers wobble run-to-run with LLM latency/variance. Multi-state / multi-year / trials questions are split to [roadmap](benchmarks/questions-roadmap.jsonl). This is a smoke diagnostic, **not** a production quality score. |
+| Measured on real data (current scope) | 6 California-scoped questions matching the loaded slice. A representative run: **exec 100%, kw 100%** (of questions returning rows), **recall ≈ 50%** (strict "referenced every expected table" — the agent often answers via Part D's own specialty column instead of joining `npi`). Numbers wobble run-to-run with LLM variance. Other states / multi-year / single-HCP-list / trials questions are split to [roadmap](benchmarks/questions-roadmap.jsonl). A smoke diagnostic, **not** a production quality score. |
 | Runs through Claude Code subscription, not API key | `.env` has `LLM_PROVIDER=claude_code`; subprocess shells out to local `claude` CLI |
 
 ---
@@ -183,9 +183,9 @@ make demo-real
 
 The project calls **three public US Federal healthcare datasets**, plus one small local lookup table. Each external dataset gets its own Postgres schema and table — **no merging, no cross-source joins at ingest time**. The agent does the joining at query time, the same way an analyst would in a notebook.
 
-> **"Did you mash the data together?"** No. Each table below is a 1-to-1 slice of one external dataset. Column names are kept identical to the CMS originals (lowercased for Postgres convention). If you `SELECT * FROM payments.general_payments LIMIT 5` you see the same row structure as the raw CMS CSV.
+> **"Did you mash the data together?"** No — each table is sourced from a single external dataset, with no cross-source joins at ingest. To keep the warehouse small we load a **selected subset of columns** (lowercased, and for Open Payments a few renamed to short names — see the `WANTED`/`COL_MAP` maps in `scripts/ingest_*.py`), not a byte-for-byte copy of the CMS CSV. The column meanings mirror the CMS originals; the set is a subset.
 
-| Postgres table | Source dataset (1-to-1) | What each row represents | Approx size (CA only) |
+| Postgres table | Source dataset (column subset) | What each row represents | Approx size (CA only) |
 |---|---|---|---|
 | `payments.general_payments` | [**CMS Open Payments — General Payments**](https://www.cms.gov/openpayments) | One industry-to-HCP payment record (a consulting fee, a meal, a travel reimbursement). Federal law requires every US drug & device company to report these. | ~500K rows / year |
 | `partd.prescriber_drug_yearly` | [**CMS Medicare Part D — Prescribers by Provider and Drug**](https://data.cms.gov/provider-summary-by-type-of-service/medicare-part-d-prescribers/medicare-part-d-prescribers-by-provider-and-drug) | One row per (prescriber × drug × year): how many claims, total cost, day supply. | ~1M rows / year |

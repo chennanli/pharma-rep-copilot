@@ -2,6 +2,8 @@
 
 All sources are public and reproducible. Designed so anyone can build this without internal pharma access.
 
+> ⚠️ **Scope & status — read first.** This describes the **target** set of data sources. The **current build loads only**: Medicare Part D 2024 (by provider and drug, California) + Open Payments 2023 (General Payments, California) + an `npi.npi_registry` derived from the Part D NPIs + a small hand-curated `reference.drug_alias` seed. The ClinicalTrials.gov (`trials.*`), DailyMed/RxNorm (`drugs.*`), and the Open Payments `research_payments` / `ownership` tables below are **planned, not built**. The one reproducible command today is `make demo-real` (or `python scripts/download_cms_via_api.py --state CA`).
+
 ---
 
 ## 1. CMS Open Payments (Sunshine Act)
@@ -152,19 +154,23 @@ All sources are public and reproducible. Designed so anyone can build this witho
 5. RxNorm/DailyMed        (drug normalization layer)
 ```
 
-Run sequentially via `scripts/ingest_all.sh`.
+*(Target order. The current build only does steps 2–3 plus a derived NPI table — see the scope note at the top.)*
 
 ---
 
-## 7. Sample for Local Dev
+## 7. Reproducing the current (California) build
 
-For an 8 GB MacBook, full datasets are too much. Use sample mode:
+For a laptop, the current real-data path loads a California slice in one command:
 
 ```bash
-python scripts/ingest_open_payments.py --year 2023 --states CA,NY --sample 500000
-python scripts/ingest_part_d.py --year 2022 --states CA,NY
-python scripts/ingest_npi.py --states CA,NY
-python scripts/ingest_trials.py --conditions "breast cancer,HER2"
+make demo-real
+# equivalently, just the download+ingest:
+python scripts/download_cms_via_api.py --state CA
 ```
 
-This yields a ~2 GB warehouse focused on CA/NY breast cancer / HER2+ — enough to run all 30 benchmark questions meaningfully.
+This pulls Medicare Part D 2024 (by provider and drug, CA) — with a deterministic
+top-up of the demo's hero drugs (trastuzumab/Herceptin, ado-trastuzumab/Kadcyla,
+pembrolizumab/Keytruda) and de-duplication — plus Open Payments 2023 (General
+Payments, CA), then derives `npi.npi_registry` from the Part D NPIs. Enough to run
+the **7 current-scope benchmark questions** (`benchmarks/questions.jsonl`); the other
+23 are roadmap (`benchmarks/questions-roadmap.jsonl`).

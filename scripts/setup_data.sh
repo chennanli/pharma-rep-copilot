@@ -37,11 +37,11 @@ You need to download two CSVs from CMS and place them in:
   $RAW/
 
 ================================================================================
-(1) Medicare Part D Prescribers by Provider AND Drug — latest year (currently 2022)
+(1) Medicare Part D Prescribers by Provider AND Drug — latest year (currently 2024)
     https://data.cms.gov/provider-summary-by-type-of-service/medicare-part-d-prescribers/medicare-part-d-prescribers-by-provider-and-drug
     • Click "Download" → take the full CSV (~1 GB compressed, ~5 GB unzipped).
     • The file is named something like:
-        MUP_DPR_RY24_P04_V10_DY22_NPIBN.csv
+        MUP_DPR_RY26_P04_V10_DY24_NPIBN.csv
     • Rename or symlink to:
         medicare_part_d_prescriber_by_provider_and_drug.csv
     • Expected at:

@@ -83,6 +83,38 @@ OP_WANTED_COLUMNS = [
 ]
 PAGE_SIZE = 5000
 
+# Generic names the demo + current-scope benchmark depend on. They are rare enough
+# that a capped broad CA pull can miss them, so after the broad slice we deterministically
+# top them up with a targeted per-drug pull, then de-duplicate the whole set. This makes
+# `make demo-real` reproduce the Herceptin/Kadcyla demo from scratch, not just by luck.
+PART_D_HERO_DRUGS = [
+    "Trastuzumab",                # Herceptin — Alice's Q1 / benchmark mkt_01
+    "Ado-Trastuzumab Emtansine",  # Kadcyla — Bob's Q2 / the demo's second query
+    "Pembrolizumab",              # Keytruda
+]
+HERO_DRUG_CAP = 20000  # per-drug cap for the targeted top-up
+
+
+def _pd_key(row: dict) -> tuple:
+    """De-dup key for a Part D row: prescriber + brand + generic."""
+    return (
+        str(row.get("Prscrbr_NPI", "")),
+        (row.get("Brnd_Name") or "").upper(),
+        (row.get("Gnrc_Name") or "").upper(),
+    )
+
+
+def dedup_part_d_rows(rows: Iterator[dict]) -> Iterator[dict]:
+    """Yield rows with duplicate (NPI, brand, generic) keys removed, preserving order.
+    Pure + side-effect-free so it can be unit-tested without any network."""
+    seen: set = set()
+    for row in rows:
+        k = _pd_key(row)
+        if k in seen:
+            continue
+        seen.add(k)
+        yield row
+
 
 def fetch_paginated(uuid: str, filters: dict[str, str], max_rows: int) -> Iterator[dict]:
     """Yield rows from a CMS Data API dataset, paginated, with filters applied."""
@@ -153,22 +185,32 @@ def download_part_d(state: str, max_rows: int, out_csv: Path):
 
     label, uuid = chosen
     print(f"  Using: {label}")
-    print(f"  Streaming up to {max_rows:,} rows to {out_csv} ...")
+    print(f"  Streaming up to {max_rows:,} rows to {out_csv} (+ hero-drug top-up) ...")
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     # Write to a temp file; only atomically rename into place on FULL success, so a
     # mid-stream failure can never leave a partial CSV that a later ingest mistakes
     # for complete data.
     tmp = out_csv.with_suffix(out_csv.suffix + ".tmp")
+
+    def _source():
+        # 1) broad CA slice (capped)
+        yield from fetch_paginated(uuid, filters, max_rows)
+        # 2) deterministic top-up of rare-but-needed drugs (de-duped against the broad pull)
+        for drug in PART_D_HERO_DRUGS:
+            yield from fetch_paginated(uuid, {**filters, "Gnrc_Name": drug}, HERO_DRUG_CAP)
+
     n = 0
+    present: set = set()
     try:
         with tmp.open("w", newline="", encoding="utf-8") as fh:
             writer = None
-            for row in fetch_paginated(uuid, filters, max_rows):
+            for row in dedup_part_d_rows(_source()):
                 if writer is None:
                     writer = csv.DictWriter(fh, fieldnames=list(row.keys()))
                     writer.writeheader()
                 writer.writerow(row)
                 n += 1
+                present.add((row.get("Gnrc_Name") or "").upper())
     except Exception as e:
         tmp.unlink(missing_ok=True)
         print(f"  ✗ Part D download failed mid-stream: {e}")
@@ -177,7 +219,11 @@ def download_part_d(state: str, max_rows: int, out_csv: Path):
         tmp.unlink(missing_ok=True)
         return 0
     tmp.replace(out_csv)
-    print(f"  ✓ wrote {n:,} rows")
+    missing = [d for d in PART_D_HERO_DRUGS if d.upper() not in present]
+    if missing:
+        print(f"  ⚠ hero drugs absent from the CA pull: {missing} — "
+              "the demo/benchmark queries for those may return no rows.")
+    print(f"  ✓ wrote {n:,} unique rows")
     return n
 
 
@@ -302,7 +348,55 @@ def main():
              "--input", str(op_csv), "--state", args.state],
             check=True,
         )
+    else:
+        # Part D-only mode: clear any payments rows left over from a previous run so
+        # we never end up with "new Part D + stale Open Payments".
+        print("\n▶ Part D-only mode: clearing the payments table so no stale OP rows remain ...")
+        _truncate_payments()
+
+    _post_load_check(args.state)
     print("\n✓ Done.")
+
+
+def _pg_conn():
+    import os
+
+    import psycopg
+    return psycopg.connect(
+        host=os.getenv("PG_HOST", "localhost"), port=int(os.getenv("PG_PORT", "5432")),
+        dbname=os.getenv("PG_DB", "hcp_insights"),
+        user=os.getenv("PG_ADMIN_USER", "hcp_admin"),
+        password=os.getenv("PG_ADMIN_PASSWORD", "admin-dev-only"),
+    )
+
+
+def _truncate_payments():
+    try:
+        with _pg_conn() as conn, conn.cursor() as cur:
+            cur.execute("TRUNCATE payments.general_payments")
+        print("  ✓ payments.general_payments cleared.")
+    except Exception as e:
+        print(f"  ⚠ could not clear payments table: {e}")
+
+
+def _post_load_check(state: str):
+    """Confirm the hero demo query (CA trastuzumab/Herceptin) actually has rows — so a
+    silently-empty load can't masquerade as success."""
+    try:
+        with _pg_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) FROM partd.prescriber_drug_yearly "
+                "WHERE prscrbr_state = %s AND UPPER(gnrc_name) LIKE '%%TRASTUZUMAB%%'",
+                (state.upper(),),
+            )
+            n_tz = cur.fetchone()[0]
+        if n_tz == 0:
+            print("⚠ post-load check: NO trastuzumab (Herceptin) rows — the hero demo query "
+                  "will be empty. Check the hero-drug top-up.")
+        else:
+            print(f"✓ post-load check: {n_tz} trastuzumab rows present — the Herceptin demo query returns data.")
+    except Exception as e:
+        print(f"(post-load check skipped: {e})")
 
 
 if __name__ == "__main__":

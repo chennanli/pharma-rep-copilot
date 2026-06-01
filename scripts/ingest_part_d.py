@@ -8,13 +8,13 @@ Input : a Part D Prescriber-by-Provider-and-Drug CSV downloaded from CMS.
 Output: rows in partd.prescriber_drug_yearly, filtered to ONE STATE (default CA).
 
 CMS column names change occasionally. This script normalizes the most recent
-CMS naming (RY24, data year 2022). If the schema differs, edit COL_MAP below.
+CMS naming (latest release, data year 2024). If the schema differs, edit COL_MAP below.
 
 Streaming — reads the file row-by-row, filters, and COPYs into Postgres in batches.
 Doesn't load the whole CSV into memory.
 
 Usage:
-    python scripts/ingest_part_d.py [--state CA] [--year 2022]
+    python scripts/ingest_part_d.py [--state CA] [--year 2024]
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ load_dotenv(ROOT / ".env")
 
 DEFAULT_INPUT = ROOT / "data" / "raw" / "medicare_part_d_prescriber_by_provider_and_drug.csv"
 
-# CMS Medicare Part D Prescriber by Provider and Drug — RY24 (data year 2022) column names.
+# CMS Medicare Part D Prescriber by Provider and Drug — latest release (data year 2024) column names.
 # Update if your file uses different headers.
 COL_MAP = {
     "Prscrbr_NPI":           "prscrbr_npi",
