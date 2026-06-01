@@ -117,7 +117,7 @@ All ingested into Postgres schemas of the same name. Ingestion scripts in `scrip
 | `ingest_npi.py` | CSV → Postgres for NPI Registry subset. |
 | `ingest_trials.py` | ClinicalTrials.gov API → Postgres. |
 | `build_value_index.py` | Pre-compute fuzzy lookup index for HCP names, drug names. |
-| `run_benchmark.py` | Run the current-scope eval (7 questions on the loaded CA slice). Emit jsonl + score summary. |
+| `run_benchmark.py` | Run the current-scope eval (6 questions on the loaded CA slice). Emit jsonl + score summary. |
 | `analyze_failures.py` | Group failed questions by failure mode. |
 
 ### 4.4 `benchmarks/`

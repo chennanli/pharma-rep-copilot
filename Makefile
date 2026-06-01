@@ -7,7 +7,7 @@
 # Everything else is a building block of those two.
 
 .PHONY: help demo demo-real setup uv-install venv deps up down logs \
-        db-init seed-synth seed-real-cms run open clean reset doctor data-status \
+        db-init seed-synth seed-real run open clean reset doctor data-status \
         install-docker
 
 UV    := $(shell command -v uv 2>/dev/null)
