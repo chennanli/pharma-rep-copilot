@@ -155,15 +155,28 @@ def download_part_d(state: str, max_rows: int, out_csv: Path):
     print(f"  Using: {label}")
     print(f"  Streaming up to {max_rows:,} rows to {out_csv} ...")
     out_csv.parent.mkdir(parents=True, exist_ok=True)
+    # Write to a temp file; only atomically rename into place on FULL success, so a
+    # mid-stream failure can never leave a partial CSV that a later ingest mistakes
+    # for complete data.
+    tmp = out_csv.with_suffix(out_csv.suffix + ".tmp")
     n = 0
-    with out_csv.open("w", newline="", encoding="utf-8") as fh:
-        writer = None
-        for row in fetch_paginated(uuid, filters, max_rows):
-            if writer is None:
-                writer = csv.DictWriter(fh, fieldnames=list(row.keys()))
-                writer.writeheader()
-            writer.writerow(row)
-            n += 1
+    try:
+        with tmp.open("w", newline="", encoding="utf-8") as fh:
+            writer = None
+            for row in fetch_paginated(uuid, filters, max_rows):
+                if writer is None:
+                    writer = csv.DictWriter(fh, fieldnames=list(row.keys()))
+                    writer.writeheader()
+                writer.writerow(row)
+                n += 1
+    except Exception as e:
+        tmp.unlink(missing_ok=True)
+        print(f"  ✗ Part D download failed mid-stream: {e}")
+        raise
+    if n == 0:
+        tmp.unlink(missing_ok=True)
+        return 0
+    tmp.replace(out_csv)
     print(f"  ✓ wrote {n:,} rows")
     return n
 
@@ -172,46 +185,55 @@ def download_open_payments(state: str, max_rows: int, out_csv: Path):
     """Open Payments lives on its OWN portal (openpaymentsdata.cms.gov) with a
     DKAN datastore query API — different host and query shape from Part D.
     We page through CA General Payments and write the columns ingest expects.
+
+    A mid-stream request failure is FATAL (raises) and a partial file is discarded —
+    we never silently keep half a download.
     """
     print("\n▶ Open Payments (openpaymentsdata.cms.gov datastore) ...")
     label, ds_id = OPEN_PAYMENTS_DATASETS[0]
     print(f"  Using: {label}")
     print(f"  Streaming up to {max_rows:,} rows to {out_csv} ...")
     out_csv.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out_csv.with_suffix(out_csv.suffix + ".tmp")
     n = 0
     offset = 0
-    with out_csv.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=OP_WANTED_COLUMNS)
-        writer.writeheader()
-        while n < max_rows:
-            params = {
-                "conditions[0][property]": "recipient_state",
-                "conditions[0][value]": state.upper(),
-                "conditions[0][operator]": "=",
-                "limit": min(OP_PAGE_SIZE, max_rows - n),
-                "offset": offset,
-            }
-            url = f"{OP_API_BASE}/{ds_id}/0?{urlencode(params)}"
-            req = Request(url, headers={"Accept": "application/json",
-                                        "User-Agent": "pharma-rep-copilot/1.0"})
-            try:
+    try:
+        with tmp.open("w", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=OP_WANTED_COLUMNS)
+            writer.writeheader()
+            while n < max_rows:
+                params = {
+                    "conditions[0][property]": "recipient_state",
+                    "conditions[0][value]": state.upper(),
+                    "conditions[0][operator]": "=",
+                    "limit": min(OP_PAGE_SIZE, max_rows - n),
+                    "offset": offset,
+                }
+                url = f"{OP_API_BASE}/{ds_id}/0?{urlencode(params)}"
+                req = Request(url, headers={"Accept": "application/json",
+                                            "User-Agent": "pharma-rep-copilot/1.0"})
                 with urlopen(req, timeout=60) as r:
                     body = json.loads(r.read().decode("utf-8"))
-            except Exception as e:
-                print(f"  ! request failed at offset {offset}: {e}; stopping early")
-                break
-            results = body.get("results") or []
-            if not results:
-                break
-            for row in results:
-                writer.writerow({k: row.get(k, "") for k in OP_WANTED_COLUMNS})
-                n += 1
-                if n >= max_rows:
+                results = body.get("results") or []
+                if not results:
                     break
-            print(f"    ... {n:,} rows fetched")
-            if len(results) < params["limit"]:
-                break
-            offset += len(results)
+                for row in results:
+                    writer.writerow({k: row.get(k, "") for k in OP_WANTED_COLUMNS})
+                    n += 1
+                    if n >= max_rows:
+                        break
+                print(f"    ... {n:,} rows fetched")
+                if len(results) < params["limit"]:
+                    break
+                offset += len(results)
+    except Exception as e:
+        tmp.unlink(missing_ok=True)
+        print(f"  ✗ Open Payments download failed mid-stream: {e}")
+        raise
+    if n == 0:
+        tmp.unlink(missing_ok=True)
+        return 0
+    tmp.replace(out_csv)
     print(f"  ✓ wrote {n:,} rows")
     return n
 
@@ -226,26 +248,39 @@ def main():
                         "data-api serves the latest year; verified 2024 as of 2026-05).")
     p.add_argument("--skip-ingest", action="store_true",
                    help="Just download CSVs to data/raw/; don't COPY into Postgres.")
+    p.add_argument("--allow-part-d-only", action="store_true",
+                   help="Permit a Part D-only load if Open Payments returns zero rows. "
+                        "Without this flag, an empty/failed Open Payments download aborts "
+                        "the whole run so the warehouse is never left half-loaded.")
     args = p.parse_args()
 
     raw = ROOT / "data" / "raw"
     pd_csv = raw / "part_d_via_api.csv"
     op_csv = raw / "open_payments_via_api.csv"
 
-    n_pd = download_part_d(args.state, args.max_rows, pd_csv)
-    n_op = download_open_payments(args.state, args.max_rows, op_csv)
+    # A mid-stream failure raises (and discards the temp file); abort the whole run
+    # so we never ingest a partial or stale CSV.
+    try:
+        n_pd = download_part_d(args.state, args.max_rows, pd_csv)
+        n_op = download_open_payments(args.state, args.max_rows, op_csv)
+    except Exception as e:
+        print(f"\n✗ Download aborted: {e}. Nothing was ingested.")
+        sys.exit(2)
 
-    # Fail loudly instead of silently importing stale CSVs (a download that returns
-    # zero rows means the API rotated/changed — do NOT pretend success).
     if n_pd == 0:
         print("\n✗ Part D download returned 0 rows. Aborting — not ingesting stale data.")
         print("  Check the dataset UUID at https://data.cms.gov/provider-summary-by-type-of-service"
               "/medicare-part-d-prescribers and update PART_D_DATASETS.")
         sys.exit(2)
     if n_op == 0:
-        print("\n⚠ Open Payments returned 0 rows — continuing with Part D only.")
-        print("  Check the dataset id at https://openpaymentsdata.cms.gov/data.json"
-              " and update OPEN_PAYMENTS_DATASETS.")
+        if not args.allow_part_d_only:
+            print("\n✗ Open Payments returned 0 rows. Aborting so the warehouse is not left "
+                  "half-loaded (Part D only).")
+            print("  Re-run with --allow-part-d-only to load Part D alone on purpose, or check "
+                  "the dataset id at https://openpaymentsdata.cms.gov/data.json and update "
+                  "OPEN_PAYMENTS_DATASETS.")
+            sys.exit(3)
+        print("\n⚠ Open Payments returned 0 rows — continuing with Part D only (--allow-part-d-only).")
 
     if args.skip_ingest:
         print(f"\n✓ Downloads complete. {n_pd:,} Part D rows + {n_op:,} Open Payments rows in data/raw/")

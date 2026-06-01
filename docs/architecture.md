@@ -117,12 +117,12 @@ All ingested into Postgres schemas of the same name. Ingestion scripts in `scrip
 | `ingest_npi.py` | CSV → Postgres for NPI Registry subset. |
 | `ingest_trials.py` | ClinicalTrials.gov API → Postgres. |
 | `build_value_index.py` | Pre-compute fuzzy lookup index for HCP names, drug names. |
-| `run_benchmark.py` | Run the golden 30-question eval. Emit jsonl + score summary. |
+| `run_benchmark.py` | Run the current-scope eval (7 questions on the loaded CA slice). Emit jsonl + score summary. |
 | `analyze_failures.py` | Group failed questions by failure mode. |
 
 ### 4.4 `benchmarks/`
 
-- `questions.jsonl` — 30 golden questions. Each has: `id`, `question`, `expected_tables`, `expected_keywords`, `category`, `difficulty`, `notes`.
+- `questions.jsonl` — 7 current-scope questions answerable on the loaded CA slice (`questions-roadmap.jsonl` holds 23 more that need other states / multiple years / geo / the trials+drugs schemas). Each has: `id`, `question`, `expected_tables`, `expected_keywords`, `category`, `difficulty`, `notes`, `scope`.
 - `run-*.jsonl` — Per-run outputs. One JSON per question per run.
 
 ### 4.5 `.claude/`

@@ -134,7 +134,7 @@ This is the team-memory effect at the entity level: every query any rep runs qui
 | **Verified queries help DIFFERENT users (Question Memory crosses user boundaries)** | Screenshot 3: top right shows "signed in as **bob**"; the badge shows `✓ used verified example from alice`. Two different users; cross-user transfer is automatic. |
 | Team memory lowers cold-start cost for the next user | Bob's Kadcyla SQL reused Alice's verified Herceptin pattern on the first try instead of cold-starting. (Latency varies run to run; the claim is the mechanism, not a stopwatch number.) |
 | Doctor Memory auto-builds real physician profiles | Screenshot 4: Bob clicks Dr. Michael Chung; sees auto-extracted specialty + Kadcyla prescribing — no rep typed them. Across both queries: 16 facts / 8 doctors. |
-| Measured on real data (current scope) | The 7 currently-answerable CA questions: **exec 100%, kw 100%** (of questions returning rows), **recall 43%** (strict "referenced every expected table" — the agent often answers via Part D's own specialty column instead of joining `npi`). Multi-state / multi-year / trials questions are split out to roadmap. This is a diagnostic, **not** a production quality score. |
+| Measured on real data (current scope) | 7 California-scoped questions matching the loaded slice. A representative run: **exec 6–7 / 7, recall ≈ 50%** (strict "referenced every expected table" — the agent often answers via Part D's own specialty column instead of joining `npi`), **kw 100%** of the questions that return rows. Numbers wobble run-to-run with LLM latency/variance. Multi-state / multi-year / trials questions are split to [roadmap](benchmarks/questions-roadmap.jsonl). This is a smoke diagnostic, **not** a production quality score. |
 | Runs through Claude Code subscription, not API key | `.env` has `LLM_PROVIDER=claude_code`; subprocess shells out to local `claude` CLI |
 
 ---
@@ -251,6 +251,8 @@ This project has **two distinct memories**, and confusing them is the #1 thing p
 Together: Alice corrects one SQL pattern (Question Memory captures it). Her query returns rows about 10 doctors (Doctor Memory captures their facts). A week later Bob's structurally similar query benefits from *both* — Alice's pattern AND the fact that one of his doctors is already partially known to the system.
 
 ### The walk-through: Day 1, Day 7, Day 30
+
+> ⚠️ **This is a hypothetical future scenario** illustrating how the memory layer is *intended* to compound with sustained team use (including a same-doctor-across-users case). It is not a transcript of the screenshots above — the live run on the current CA data slice proves cross-user *Question* Memory and automatic *Doctor* profile-building, but did not happen to surface one doctor across both users. Names like "Dr. Chen" here are illustrative.
 
 > 🔴 **Day 1** — Alice asks a Herceptin question. Returns 0 rows.
 >
@@ -460,7 +462,7 @@ pharma-rep-copilot/
 │   ├── setup_data.sh      # manual download orchestrator
 │   ├── generate_voiceover.py
 │   └── run_benchmark.py
-├── benchmarks/questions.jsonl   # 30 golden eval questions
+├── benchmarks/questions.jsonl   # 7 current-scope eval questions (+ 23 in questions-roadmap.jsonl)
 └── data/                  # gitignored: CSVs + memory.db + chroma/
 ```
 
