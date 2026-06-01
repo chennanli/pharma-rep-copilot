@@ -42,3 +42,72 @@ def test_hero_drugs_include_the_demo_drugs():
     names = {d.upper() for d in dlcms.PART_D_HERO_DRUGS}
     assert "TRASTUZUMAB" in names          # Herceptin
     assert "ADO-TRASTUZUMAB EMTANSINE" in names  # Kadcyla
+
+
+# ---------- fail-closed validation paths ----------
+
+import pytest  # noqa: E402
+
+
+def test_missing_hero_drugs_uses_exact_match_not_substring():
+    # All three present → nothing missing.
+    assert dlcms.missing_hero_drugs(
+        {"TRASTUZUMAB", "ADO-TRASTUZUMAB EMTANSINE", "PEMBROLIZUMAB"}) == []
+    # Herceptin (TRASTUZUMAB) absent, but Kadcyla present: a substring check would
+    # wrongly pass; exact match must still report TRASTUZUMAB missing.
+    missing = dlcms.missing_hero_drugs({"ADO-TRASTUZUMAB EMTANSINE", "PEMBROLIZUMAB"})
+    assert "TRASTUZUMAB" in missing
+
+
+class _FakeCur:
+    def __init__(self, counts):
+        self.counts = counts
+        self._g = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, sql, params=None):
+        self._g = params[1] if params and len(params) > 1 else None
+
+    def fetchone(self):
+        return (self.counts.get(self._g, 0),)
+
+
+class _FakeConn:
+    def __init__(self, counts):
+        self.counts = counts
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def cursor(self):
+        return _FakeCur(self.counts)
+
+
+def test_truncate_payments_fails_closed_on_db_error(monkeypatch):
+    def boom():
+        raise RuntimeError("db down")
+    monkeypatch.setattr(dlcms, "_pg_conn", boom)
+    with pytest.raises(RuntimeError):
+        dlcms._truncate_payments()
+
+
+def test_post_load_check_fails_when_a_hero_drug_missing(monkeypatch):
+    # Herceptin/TRASTUZUMAB has 0 rows → must raise.
+    counts = {"TRASTUZUMAB": 0, "ADO-TRASTUZUMAB EMTANSINE": 5, "PEMBROLIZUMAB": 9}
+    monkeypatch.setattr(dlcms, "_pg_conn", lambda: _FakeConn(counts))
+    with pytest.raises(RuntimeError):
+        dlcms._post_load_check("CA")
+
+
+def test_post_load_check_passes_when_all_present(monkeypatch):
+    counts = {"TRASTUZUMAB": 6, "ADO-TRASTUZUMAB EMTANSINE": 1, "PEMBROLIZUMAB": 63}
+    monkeypatch.setattr(dlcms, "_pg_conn", lambda: _FakeConn(counts))
+    dlcms._post_load_check("CA")  # should not raise

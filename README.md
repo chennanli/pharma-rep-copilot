@@ -462,7 +462,7 @@ pharma-rep-copilot/
 │   ├── setup_data.sh      # manual download orchestrator
 │   ├── generate_voiceover.py
 │   └── run_benchmark.py
-├── benchmarks/questions.jsonl   # 7 current-scope eval questions (+ 23 in questions-roadmap.jsonl)
+├── benchmarks/questions.jsonl   # 6 current-scope eval questions (+ 24 in questions-roadmap.jsonl)
 └── data/                  # gitignored: CSVs + memory.db + chroma/
 ```
 

@@ -47,7 +47,7 @@ You need to download two CSVs from CMS and place them in:
     • Expected at:
         $PARTD
 
-(2) CMS Open Payments — General Payments — latest program year (currently 2023)
+(2) CMS Open Payments — General Payments — demo-pinned to program year 2023 (CMS has since published PY2024)
     https://www.cms.gov/openpayments/data/datasetdownloads
     • Click "Detailed Dataset for {YEAR}" → download the ZIP (~3 GB).
     • Unzip; the file you want is:
@@ -73,7 +73,7 @@ echo "▶ Inputs found. Running ingestion pipeline."
 echo
 
 echo "── Step 1/4: ingest Part D (filter CA, may take 5-10 min) ──"
-"$PY" "$ROOT/scripts/ingest_part_d.py" --state CA --year 2022
+"$PY" "$ROOT/scripts/ingest_part_d.py" --state CA --year 2024
 
 echo
 echo "── Step 2/4: derive npi.npi_registry from Part D distinct NPIs ──"
@@ -91,7 +91,7 @@ echo
 echo "✓ Data setup complete."
 echo
 echo "Try a query:"
-echo "  $PY -m app.cli \"Top 10 oncologists in California prescribing Herceptin in 2023\""
+echo "  $PY -m app.cli \"Top 10 oncologists in California prescribing Herceptin in 2024\""
 echo
 echo "Or start the web UI:"
 echo "  $PY -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload"

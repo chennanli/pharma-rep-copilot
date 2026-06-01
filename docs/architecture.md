@@ -122,7 +122,7 @@ All ingested into Postgres schemas of the same name. Ingestion scripts in `scrip
 
 ### 4.4 `benchmarks/`
 
-- `questions.jsonl` — 7 current-scope questions answerable on the loaded CA slice (`questions-roadmap.jsonl` holds 23 more that need other states / multiple years / geo / the trials+drugs schemas). Each has: `id`, `question`, `expected_tables`, `expected_keywords`, `category`, `difficulty`, `notes`, `scope`.
+- `questions.jsonl` — 6 current-scope questions answerable on the loaded CA slice (`questions-roadmap.jsonl` holds 24 more that need other states / multiple years / geo / single-HCP-detail authorization / the trials+drugs schemas). Each has: `id`, `question`, `expected_tables`, `expected_keywords`, `category`, `difficulty`, `notes`, `scope`.
 - `run-*.jsonl` — Per-run outputs. One JSON per question per run.
 
 ### 4.5 `.claude/`
@@ -215,7 +215,7 @@ Even though the data is public, we design the architecture as if it were interna
 2. Read `docs/data-sources.md` to understand what's in the warehouse.
 3. Read `docs/safety.md` to understand what the agent cannot do.
 4. Set up Postgres: `bash scripts/setup_postgres.sh`.
-5. Ingest a small sample: `python scripts/ingest_open_payments.py --year 2023 --sample 100000`.
-6. Run the agent: `python -m app.cli "How many oncologists in CA received payments from any sponsor in 2023?"`
-7. Run the benchmark: `python scripts/run_benchmark.py`.
+5. Load the California slice: `make demo-real` (or `python scripts/download_cms_via_api.py --state CA`) — synthetic alternative: `make demo`.
+6. Run the agent: `python -m app.cli "How many oncologists in California prescribed Herceptin in 2024?"`
+7. Run the benchmark: `python scripts/run_benchmark.py` (the 6 current-scope CA questions).
 8. Read the main [`README.md`](../README.md) for the user-facing walk-through (the memory principle, the demo arc).

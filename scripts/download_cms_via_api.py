@@ -116,6 +116,19 @@ def dedup_part_d_rows(rows: Iterator[dict]) -> Iterator[dict]:
         yield row
 
 
+# Exact generic names that MUST be present after a load (each hero drug, upper-cased).
+# Exact equality matters: a substring check on 'TRASTUZUMAB' would also match
+# 'ADO-TRASTUZUMAB EMTANSINE' (Kadcyla), so Herceptin could look present when it isn't.
+REQUIRED_HERO_GENERICS = [d.upper() for d in PART_D_HERO_DRUGS]
+
+
+def missing_hero_drugs(present_generics) -> list:
+    """Return the required hero generics absent from `present_generics`, by EXACT
+    (upper-cased) name. Pure helper for fail-closed checks + unit tests."""
+    present = {(g or "").upper() for g in present_generics}
+    return [g for g in REQUIRED_HERO_GENERICS if g not in present]
+
+
 def fetch_paginated(uuid: str, filters: dict[str, str], max_rows: int) -> Iterator[dict]:
     """Yield rows from a CMS Data API dataset, paginated, with filters applied."""
     offset = 0
@@ -218,12 +231,15 @@ def download_part_d(state: str, max_rows: int, out_csv: Path):
     if n == 0:
         tmp.unlink(missing_ok=True)
         return 0
-    tmp.replace(out_csv)
-    missing = [d for d in PART_D_HERO_DRUGS if d.upper() not in present]
+    # Fail closed: if a required hero drug is missing, do NOT promote the partial file.
+    missing = missing_hero_drugs(present)
     if missing:
-        print(f"  ⚠ hero drugs absent from the CA pull: {missing} — "
-              "the demo/benchmark queries for those may return no rows.")
-    print(f"  ✓ wrote {n:,} unique rows")
+        tmp.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"Part D pull is missing required hero drugs (exact generic match): {missing}. "
+            "The demo/benchmark queries for those would be empty, so the download is rejected.")
+    tmp.replace(out_csv)
+    print(f"  ✓ wrote {n:,} unique rows (all hero drugs present)")
     return n
 
 
@@ -348,13 +364,16 @@ def main():
              "--input", str(op_csv), "--state", args.state],
             check=True,
         )
-    else:
-        # Part D-only mode: clear any payments rows left over from a previous run so
-        # we never end up with "new Part D + stale Open Payments".
-        print("\n▶ Part D-only mode: clearing the payments table so no stale OP rows remain ...")
-        _truncate_payments()
-
-    _post_load_check(args.state)
+    try:
+        if n_op == 0:
+            # Part D-only mode: clear any payments rows left over from a previous run so
+            # we never end up with "new Part D + stale Open Payments".
+            print("\n▶ Part D-only mode: clearing the payments table so no stale OP rows remain ...")
+            _truncate_payments()
+        _post_load_check(args.state)
+    except Exception as e:
+        print(f"\n✗ Post-load step failed (fail-closed): {e}")
+        sys.exit(4)
     print("\n✓ Done.")
 
 
@@ -371,32 +390,31 @@ def _pg_conn():
 
 
 def _truncate_payments():
-    try:
-        with _pg_conn() as conn, conn.cursor() as cur:
-            cur.execute("TRUNCATE payments.general_payments")
-        print("  ✓ payments.general_payments cleared.")
-    except Exception as e:
-        print(f"  ⚠ could not clear payments table: {e}")
+    """Clear the payments table for Part D-only mode. FAIL CLOSED: a DB error
+    re-raises so the run aborts instead of reporting success while stale rows remain."""
+    with _pg_conn() as conn, conn.cursor() as cur:
+        cur.execute("TRUNCATE payments.general_payments")
+    print("  ✓ payments.general_payments cleared.")
 
 
 def _post_load_check(state: str):
-    """Confirm the hero demo query (CA trastuzumab/Herceptin) actually has rows — so a
-    silently-empty load can't masquerade as success."""
-    try:
-        with _pg_conn() as conn, conn.cursor() as cur:
+    """Verify EACH required hero drug actually loaded, by exact generic name. FAIL CLOSED:
+    a missing drug (zero rows) or any DB error raises, so a silently-empty load can never
+    masquerade as success. Exact equality avoids 'TRASTUZUMAB' matching Kadcyla's
+    'ADO-TRASTUZUMAB EMTANSINE'."""
+    with _pg_conn() as conn, conn.cursor() as cur:
+        for generic in REQUIRED_HERO_GENERICS:
             cur.execute(
                 "SELECT COUNT(*) FROM partd.prescriber_drug_yearly "
-                "WHERE prscrbr_state = %s AND UPPER(gnrc_name) LIKE '%%TRASTUZUMAB%%'",
-                (state.upper(),),
+                "WHERE prscrbr_state = %s AND UPPER(gnrc_name) = %s",
+                (state.upper(), generic),
             )
-            n_tz = cur.fetchone()[0]
-        if n_tz == 0:
-            print("⚠ post-load check: NO trastuzumab (Herceptin) rows — the hero demo query "
-                  "will be empty. Check the hero-drug top-up.")
-        else:
-            print(f"✓ post-load check: {n_tz} trastuzumab rows present — the Herceptin demo query returns data.")
-    except Exception as e:
-        print(f"(post-load check skipped: {e})")
+            cnt = cur.fetchone()[0]
+            if cnt == 0:
+                raise RuntimeError(
+                    f"post-load check FAILED: 0 rows for required generic '{generic}'. "
+                    "The demo/benchmark queries for it would be empty.")
+            print(f"  ✓ {generic}: {cnt} rows")
 
 
 if __name__ == "__main__":

@@ -172,5 +172,5 @@ This pulls Medicare Part D 2024 (by provider and drug, CA) — with a determinis
 top-up of the demo's hero drugs (trastuzumab/Herceptin, ado-trastuzumab/Kadcyla,
 pembrolizumab/Keytruda) and de-duplication — plus Open Payments 2023 (General
 Payments, CA), then derives `npi.npi_registry` from the Part D NPIs. Enough to run
-the **7 current-scope benchmark questions** (`benchmarks/questions.jsonl`); the other
-23 are roadmap (`benchmarks/questions-roadmap.jsonl`).
+the **6 current-scope benchmark questions** (`benchmarks/questions.jsonl`); the other
+24 are roadmap (`benchmarks/questions-roadmap.jsonl`).
